@@ -26,7 +26,7 @@ export class LibraryWs {
   async getBookByUrl(bookUrl: URL|string)
     : Promise<Errors.Result<SuccessEnvelope<Lib.XBook>>>
   {
-    return Errors.errResult('TODO');
+    return await getEnvelope<Lib.XBook, SuccessEnvelope<Lib.XBook>>(bookUrl);
   }
 
   /** given an absolute url findUrl ending with /books with query
@@ -36,26 +36,43 @@ export class LibraryWs {
   async findBooksByUrl(findUrl: URL|string)
     : Promise<Errors.Result<PagedEnvelope<Lib.XBook>>>
   {
-    return Errors.errResult('TODO');
+    // console.log(findUrl);
+    return await getEnvelope<Lib.XBook, PagedEnvelope<Lib.XBook>>(findUrl);
   }
 
   /** check out book specified by lend */
   //make a PUT request to /lendings
   async checkoutBook(lend: Lib.Lend) : Promise<Errors.Result<void>> {
-    return Errors.errResult('TODO');
+    const url = `${this.url}/lendings`;
+    const options: RequestInit = {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lend),
+    };
+    return await fetchJson<void>(url, options);
   }
 
   /** return book specified by lend */
   //make a DELETE request to /lendings
   async returnBook(lend: Lib.Lend) : Promise<Errors.Result<void>> {
-    return Errors.errResult('TODO');
+    const url = `${this.url}/lendings`;
+    const options: RequestInit = {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lend),
+    };
+    return await fetchJson<void>(url, options);
   }
 
   /** return Lend[] of all lendings for isbn. */
   //make a GET request to /lendings with query-params set
   //to { findBy: 'isbn', isbn }.
   async getLends(isbn: string) : Promise<Errors.Result<Lib.Lend[]>> {
-    return Errors.errResult('TODO');
+    const url = new URL(`${this.url}/lendings`);
+    url.searchParams.append('findBy', 'isbn');
+    url.searchParams.append('isbn', isbn);
+
+    return await fetchJson<Lib.Lend[]>(url);
   }
 
 
