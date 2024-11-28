@@ -1,6 +1,5 @@
 import { Errors } from 'cs544-js-utils';
 
-// Types defined in library.ts in earlier projects
 import * as Lib from 'library-types';
 
 import {
@@ -65,50 +64,43 @@ class App {
     const searchUrl = makeQueryUrl(`${this.wsUrl}/api/books`, { search: query });
     console.log(searchUrl);
 
-    // Fetch books from the backend
     const result = await this.ws.findBooksByUrl(searchUrl);
 
-    // Handle the result
     if (result.isOk) {
       const envelope = result.val;
       if (envelope.result.length > 0) {
-        console.log(envelope);
         this.displayBooksWithPagination(envelope);
       } else {
         this.result.innerHTML = '<p>No books found.</p>';
       }
     } else {
-      console.log(result);
-      // this.displayErrors(result.errors);
+      console.log("error");
     }
   }
 
   private displayBooksWithPagination(envelope: PagedEnvelope<Lib.XBook>) {
     const books = envelope.result;
   
-    // Clear previous results
     this.result.innerHTML = '';
+
+    const paginationbefore = this.createPagination(envelope.links);
+    this.result.appendChild(paginationbefore);
   
-    // Create book list container
     const list = makeElement('ul');
   
-    // Add each book to the list
     books.forEach((book) => {
-      // Create book item container
       const li = makeElement('li', {
         style: 'margin-bottom: 10px; display: flex; align-items: center;',
       });
   
-      // Create book title element
       const titleSpan = makeElement(
         'span',
         {
-          style: 'flex-grow: 1;', // Push the details link to the right
+          style: 'flex-grow: 1;', 
         },
         book.result.title
       );
   
-      // Add details button/link
       const detailsLink = makeElement(
         'a',
         {
@@ -126,15 +118,65 @@ class App {
       list.append(li);
     });
 
-  
-    console.log(this.result);
     this.result.appendChild(list);
   
-    // Pagination navigation
-    // const pagination = this.createPagination(envelope.links);
-    // this.result.appendChild(pagination);
+    const paginationafter = this.createPagination(envelope.links);
+    this.result.appendChild(paginationafter);
   }
-
+  
+  private createPagination(links: NavLinks): HTMLElement {
+    console.log(links);
+    const paginationContainer = makeElement('div', { 
+      class: 'pagination', 
+      style: 'display: flex; justify-content: space-between; align-items: center; width: 100%;' 
+  });
+  
+    const prevButton = makeElement(
+      'button',
+      {
+        style: 'all: unset; color: blue; text-decoration: underline; cursor: pointer;',
+        ...(links.prev ? {} : { disabled: 'true' }), 
+      },
+      '<<'
+    );
+    if (links.prev) {
+      prevButton.addEventListener('click', async () => {
+        const result = await this.ws.findBooksByUrl(links.prev?.href);
+        if (result.isOk) {
+          this.displayBooksWithPagination(result.val);
+        } else {
+          console.log("error");
+          // this.displayErrors(result.errors);
+        }
+      });
+    }
+    paginationContainer.appendChild(prevButton);
+  
+    const nextButton = makeElement(
+      'button',
+      {
+        style: 'all: unset; color: blue; text-decoration: underline; cursor: pointer;',
+        ...(links.next ? {} : { disabled: 'true' }), 
+      },
+      '>>'
+    );
+    
+    if (links.next) {
+      nextButton.addEventListener('click', async () => {
+        const result = await this.ws.findBooksByUrl(links.next?.href);
+        if (result.isOk) {
+          this.displayBooksWithPagination(result.val);
+        } else {
+          console.log("error");
+          // this.displayErrors(result.errors);
+        }
+      });
+    }
+    paginationContainer.appendChild(nextButton);
+  
+    return paginationContainer;
+  }
+  
   private async showBookDetails(book: any) {
     const bookUrl = book.links.self.href;
     const result = await this.ws.getBookByUrl(bookUrl);
@@ -146,9 +188,8 @@ class App {
   }
 
   private displayBookDetails(book: Lib.XBook) {
-    this.result.innerHTML = ''; // Clear previous content
+    this.result.innerHTML = ''; 
 
-    // Create and append detailed book information
     const details = makeElement('div');
     details.append(
       makeElement('p', {}, `ISBN: ${book.isbn}`),
@@ -160,38 +201,8 @@ class App {
       makeElement('p', {}, `Borrowers:`)
     );
 
-    // const borrowersList = makeElement('ul');
-    // book.borrowers.forEach((borrower) => {
-    //   const borrowerLi = makeElement('li', {}, borrower.name);
-
-    //   // Add return book button
-    //   const returnButton = makeElement('button', {}, 'Return Book');
-    //   returnButton.addEventListener('click', () =>
-    //     this.returnBook(book.isbn, borrower.id)
-    //   );
-
-    //   borrowerLi.append(returnButton);
-    //   borrowersList.append(borrowerLi);
-    // });
-
-    // details.append(borrowersList);
-
-    // // Add checkout functionality
-    // const patronIdInput = makeElement('input', {
-    //   id: 'patron-id',
-    //   placeholder: 'Patron ID',
-    // }) as HTMLInputElement;
-    // const checkoutButton = makeElement('button', {}, 'Checkout Book');
-    // checkoutButton.addEventListener('click', () =>
-    //   this.checkoutBook(book.isbn, patronIdInput.value)
-    // );
-
-    // details.append(
-    //   makeElement('p', {}, 'Patron ID: '),
-    //   patronIdInput,
-    //   checkoutButton
-    // );
-
+    //spoorthi
+    //We need to add code here for checkout and return 
     this.result.append(details);
   } 
 
