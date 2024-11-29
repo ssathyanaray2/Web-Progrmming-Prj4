@@ -588,12 +588,21 @@ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 var _appJs = require("./app.js");
 var _appJsDefault = parcelHelpers.interopDefault(_appJs);
 const DEFAULT_WS_URL = "https://localhost:2345";
-window.addEventListener("DOMContentLoaded", async ()=>{
-    (0, _appJsDefault.default)(getWsUrl());
+/**
+ * Entry point for the application.
+ * Initializes the app after the DOM content is fully loaded.
+ */ window.addEventListener("DOMContentLoaded", async ()=>{
+    const wsUrl = getWsUrl();
+    console.log(`Using Web Services URL: ${wsUrl}`);
+    (0, _appJsDefault.default)(wsUrl);
 });
-function getWsUrl() {
+/**
+ * Extracts the Web Services URL from the query parameters.
+ * Defaults to `DEFAULT_WS_URL` if no parameter is found.
+ * @returns The Web Services URL to be used by the application.
+ */ function getWsUrl() {
     const url = new URL(document.location.href);
-    return url?.searchParams?.get("ws-url") ?? DEFAULT_WS_URL;
+    return url.searchParams.get("ws-url") ?? DEFAULT_WS_URL;
 }
 
 },{"./app.js":"6wtUX","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"6wtUX":[function(require,module,exports) {
@@ -615,110 +624,299 @@ class App {
         this.ws = (0, _libraryWsJs.makeLibraryWs)(wsUrl);
         this.result = document.querySelector("#result");
         this.errors = document.querySelector("#errors");
-    //TODO: add search handler
-    }
-    //TODO: add private methods as needed
-    /** unwrap a result, displaying errors if !result.isOk,
-     *  returning T otherwise.   Use as if (unwrap(result)) { ... }
-     *  when T !== void.
-     */ unwrap(result) {
-        if (result.isOk === false) displayErrors(result.errors);
-        else return result.val;
-    }
-    /** clear out all errors */ clearErrors() {
-        this.errors.innerHTML = "";
-        document.querySelectorAll(`.error`).forEach((el)=>{
-            el.innerHTML = "";
+        const searchInput = document.querySelector("#search");
+        if (searchInput) this.addEnterKeyListener(searchInput, ()=>{
+            this.handleSearch(new Event("submit"));
         });
     }
-} //class App
-/** Display errors. If an error has a widget or path widgetId such
- *  that an element having ID `${widgetId}-error` exists,
- *  then the error message is added to that element; otherwise the
- *  error message is added to the element having to the element having
- *  ID `errors` wrapped within an `<li>`.
- */ function displayErrors(errors) {
-    for (const err of errors){
-        const id = err.options.widget ?? err.options.path;
-        const widget = id && document.querySelector(`#${id}-error`);
-        if (widget) widget.append(err.message);
-        else {
-            const li = (0, _utilsJs.makeElement)("li", {
-                class: "error"
-            }, err.message);
-            document.querySelector(`#errors`).append(li);
+    /**
+     * Adds an Enter key listener to a specified element.
+     */ addEnterKeyListener(element, callback) {
+        element.addEventListener("keydown", (event)=>{
+            if (event.key === "Enter") {
+                event.preventDefault();
+                callback();
+            }
+        });
+    }
+    /**
+     * Handles the search functionality by querying the API and displaying results.
+     */ async handleSearch(event) {
+        event.preventDefault();
+        this.clearErrors();
+        this.result.innerHTML = "";
+        const searchInput = document.querySelector("#search");
+        if (!searchInput || !searchInput.value.trim()) {
+            this.displayError("search", "Search field cannot be empty.");
+            return;
+        }
+        const query = searchInput.value.trim();
+        const searchUrl = (0, _utilsJs.makeQueryUrl)(`${this.wsUrl}/api/books`, {
+            search: query
+        });
+        const result = await this.ws.findBooksByUrl(searchUrl);
+        if (result.isOk) {
+            // This is an OkResult, safely access `result.val`.
+            const envelope = result.val;
+            if (envelope.result.length > 0) this.displayBooksWithPagination(envelope);
+            else this.result.innerHTML = "<p>No books found.</p>";
+        } else {
+            // This is an ErrResult, safely access `errors`.
+            const errResult = result; // Explicitly narrow to ErrResult.
+            this.displayErrors(errResult.errors);
         }
     }
-} //TODO: add functions as needed
+    /**
+     * Displays books with pagination controls.
+     */ displayBooksWithPagination(envelope) {
+        const books = envelope.result;
+        // Clear previous results
+        this.result.innerHTML = "";
+        // Create book list container
+        const list = (0, _utilsJs.makeElement)("ul");
+        // Add each book to the list
+        books.forEach((book)=>{
+            const li = (0, _utilsJs.makeElement)("li", {
+                style: "margin-bottom: 10px; display: flex; align-items: center;"
+            });
+            const titleSpan = (0, _utilsJs.makeElement)("span", {
+                style: "flex-grow: 1;"
+            }, book.result.title);
+            const detailsLink = (0, _utilsJs.makeElement)("a", {
+                href: "#",
+                style: "margin-left: 20px; text-decoration: underline; color: blue;"
+            }, "details...");
+            detailsLink.addEventListener("click", (event)=>{
+                event.preventDefault();
+                this.showBookDetails(book);
+            });
+            li.append(titleSpan, detailsLink);
+            list.append(li);
+        });
+        this.result.appendChild(list);
+        // Add pagination navigation
+        const pagination = this.createPagination(envelope.links);
+        this.result.appendChild(pagination);
+    }
+    /**
+     * Creates pagination controls for navigating results.
+     */ createPagination(links) {
+        const nav = (0, _utilsJs.makeElement)("div", {
+            class: "pagination"
+        });
+        if (links.prev) {
+            const prevLink = (0, _utilsJs.makeElement)("a", {
+                href: "#",
+                class: "prev"
+            }, "<< Previous");
+            prevLink.addEventListener("click", (event)=>{
+                event.preventDefault();
+                this.handlePagination(links.prev.href);
+            });
+            nav.appendChild(prevLink);
+        }
+        if (links.next) {
+            const nextLink = (0, _utilsJs.makeElement)("a", {
+                href: "#",
+                class: "next"
+            }, "Next >>");
+            nextLink.addEventListener("click", (event)=>{
+                event.preventDefault();
+                this.handlePagination(links.next.href);
+            });
+            nav.appendChild(nextLink);
+        }
+        return nav;
+    }
+    /**
+     * Handles pagination navigation.
+     */ async handlePagination(link) {
+        const result = await this.ws.findBooksByUrl(link);
+        if (result.isOk) // This is an OkResult, so we can safely access `val`.
+        this.displayBooksWithPagination(result.val);
+        else {
+            // This is an ErrResult, so we can safely cast and access `errors`.
+            const errorResult = result;
+            this.displayErrors(errorResult.errors);
+        }
+    }
+    /**
+     * Displays the details of a specific book.
+     */ async showBookDetails(book) {
+        const bookUrl = book.links.self.href;
+        const result = await this.ws.getBookByUrl(bookUrl);
+        const bookDetails = this.unwrap(result);
+        if (bookDetails) this.displayBookDetails(bookDetails.result);
+    }
+    /**
+     * Renders the details of a book.
+     */ displayBookDetails(book) {
+        this.result.innerHTML = "";
+        const details = (0, _utilsJs.makeElement)("div");
+        details.append((0, _utilsJs.makeElement)("p", {}, `ISBN: ${book.isbn}`), (0, _utilsJs.makeElement)("p", {}, `Title: ${book.title}`), (0, _utilsJs.makeElement)("p", {}, `Authors: ${book.authors.join(", ")}`), (0, _utilsJs.makeElement)("p", {}, `Number of Pages: ${book.pages}`), (0, _utilsJs.makeElement)("p", {}, `Publisher: ${book.publisher}`), (0, _utilsJs.makeElement)("p", {}, `Number of Copies: ${book.nCopies}`));
+        this.result.append(details);
+    }
+    /**
+     * Safely unwraps the result or displays errors.
+     */ unwrap(result) {
+        if (result.isOk === false) {
+            // This is an ErrResult
+            this.displayErrors(result.errors); // Safely access errors
+            return null;
+        }
+        // This is an OkResult
+        return result.val;
+    }
+    /**
+     * Displays a specific error for a field.
+     */ displayError(fieldId, message) {
+        const fieldError = document.querySelector(`#${fieldId}-error`);
+        if (fieldError) fieldError.textContent = message;
+        else this.errors.appendChild((0, _utilsJs.makeElement)("li", {
+            class: "error"
+        }, message));
+    }
+    /**
+     * Clears all error messages.
+     */ clearErrors() {
+        this.errors.innerHTML = "";
+        document.querySelectorAll(".error").forEach((el)=>el.textContent = "");
+    }
+    /**
+     * Displays errors in the error container.
+     */ displayErrors(errors) {
+        errors.forEach((err)=>{
+            const id = err.options?.widget ?? err.options?.path;
+            if (id) this.displayError(id, err.message);
+            else {
+                const li = (0, _utilsJs.makeElement)("li", {
+                    class: "error"
+                }, err.message);
+                this.errors.appendChild(li);
+            }
+        });
+    }
+}
 
 },{"./library-ws.js":"hrmJa","./utils.js":"3cCYB","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"hrmJa":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "makeLibraryWs", ()=>makeLibraryWs);
+/**
+ * Create a Library Web Services wrapper instance.
+ * @param url The base URL for the web services.
+ * @returns An instance of `LibraryWs`.
+ */ parcelHelpers.export(exports, "makeLibraryWs", ()=>makeLibraryWs);
 parcelHelpers.export(exports, "LibraryWs", ()=>LibraryWs);
 var _cs544JsUtils = require("cs544-js-utils");
+var _responseEnvelopesJs = require("./response-envelopes.js");
 function makeLibraryWs(url) {
     return new LibraryWs(url);
 }
 class LibraryWs {
-    //base url for these web services
     url;
     constructor(url){
         this.url = url;
     }
-    /** given an absolute books url bookUrl ending with /books/api,
-     *  return a SuccessEnvelope for the book identified by bookUrl.
+    /**
+     * Fetch details of a book using its URL.
+     * @param bookUrl The URL of the book resource.
+     * @returns A Result containing the book details or an error.
      */ async getBookByUrl(bookUrl) {
-        return (0, _cs544JsUtils.Errors).errResult("TODO");
+        return await getEnvelope(bookUrl);
     }
-    /** given an absolute url findUrl ending with /books with query
-     *  parameters search and optional query parameters count and index,
-     *  return a PagedEnvelope containing a list of matching books.
+    /**
+     * Search for books using a query URL.
+     * @param findUrl The URL containing search query parameters.
+     * @returns A Result containing paginated books or an error.
      */ async findBooksByUrl(findUrl) {
-        return (0, _cs544JsUtils.Errors).errResult("TODO");
+        return await getEnvelope(findUrl);
     }
-    /** check out book specified by lend */ //make a PUT request to /lendings
-    async checkoutBook(lend) {
-        return (0, _cs544JsUtils.Errors).errResult("TODO");
+    /**
+     * Checkout a book for a patron.
+     * @param lend The lending details containing the book and patron info.
+     * @returns A Result indicating success or an error.
+     */ async checkoutBook(lend) {
+        const url = `${this.url}/lendings`;
+        const options = {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(lend)
+        };
+        return await fetchJson(url, options);
     }
-    /** return book specified by lend */ //make a DELETE request to /lendings
-    async returnBook(lend) {
-        return (0, _cs544JsUtils.Errors).errResult("TODO");
+    /**
+     * Return a previously checked-out book.
+     * @param lend The lending details containing the book and patron info.
+     * @returns A Result indicating success or an error.
+     */ async returnBook(lend) {
+        const url = `${this.url}/lendings`;
+        const options = {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(lend)
+        };
+        return await fetchJson(url, options);
     }
-    /** return Lend[] of all lendings for isbn. */ //make a GET request to /lendings with query-params set
-    //to { findBy: 'isbn', isbn }.
-    async getLends(isbn) {
-        return (0, _cs544JsUtils.Errors).errResult("TODO");
+    /**
+     * Get all lendings of a specific book by ISBN.
+     * @param isbn The ISBN of the book.
+     * @returns A Result containing a list of lendings or an error.
+     */ async getLends(isbn) {
+        const url = new URL(`${this.url}/lendings`);
+        url.searchParams.append("findBy", "isbn");
+        url.searchParams.append("isbn", isbn);
+        return await fetchJson(url);
+    }
+    /**
+     * Get all lendings by a specific patron ID.
+     * @param patronId The ID of the patron.
+     * @returns A Result containing a list of lendings or an error.
+     */ async getLendsByPatron(patronId) {
+        const url = new URL(`${this.url}/lendings`);
+        url.searchParams.append("findBy", "patronId");
+        url.searchParams.append("patronId", patronId);
+        return await fetchJson(url);
     }
 }
-/** Return either a SuccessEnvelope<T> or PagedEnvelope<T> wrapped
- *  within a Errors.Result.  Note that the caller needs to instantiate
- *  both type parameters appropriately.
+/**
+ * Fetch an envelope response (Success or Paged) from the backend.
+ * @param url The URL of the resource.
+ * @returns A Result containing the envelope or an error.
  */ async function getEnvelope(url) {
     const result = await fetchJson(url);
-    if (result.isOk === true) {
-        const response = result.val;
-        if (response.isOk === true) return (0, _cs544JsUtils.Errors).okResult(response);
-        else return new (0, _cs544JsUtils.Errors).ErrResult(response.errors);
-    } else return result;
-}
-const DEFAULT_FETCH = {
-    method: "GET"
-};
-/** send a request to url, converting any exceptions to an
- *  error result.
- */ async function fetchJson(url, options = DEFAULT_FETCH) {
-    //<https://github.com/microsoft/TypeScript/blob/main/src/lib/dom.generated.d.ts#L26104>
-    try {
-        const response = await fetch(url, options);
-        return (0, _cs544JsUtils.Errors).okResult(await response.json());
-    } catch (err) {
-        console.error(err);
-        return (0, _cs544JsUtils.Errors).errResult(`${options.method} ${url}: error ${err}`);
+    if (result.isOk) {
+        const envelope = result.val;
+        // Check if the response is an error envelope
+        if ((0, _responseEnvelopesJs.isErrorEnvelope)(envelope)) return (0, _cs544JsUtils.Errors).errResult(envelope.errors.map((err)=>err.message).join(", "));
+        // Return the successfully parsed envelope
+        return (0, _cs544JsUtils.Errors).okResult(envelope);
     }
-} //TODO: add other functions as needed
+    return result;
+}
+/**
+ * Generic fetch wrapper with JSON parsing and error handling.
+ * @param url The URL for the fetch request.
+ * @param options Fetch options (method, headers, body, etc.).
+ * @returns A Result containing the parsed response or an error.
+ */ async function fetchJson(url, options = {
+    method: "GET"
+}) {
+    try {
+        const response = await fetch(url.toString(), options);
+        if (!response.ok) return (0, _cs544JsUtils.Errors).errResult(`HTTP error ${response.status}: ${response.statusText}`);
+        const json = await response.json();
+        return (0, _cs544JsUtils.Errors).okResult(json);
+    } catch (error) {
+        console.error(`Fetch failed: ${error}`);
+        return (0, _cs544JsUtils.Errors).errResult(`Failed to fetch from ${url}: ${error}`);
+    }
+}
 
-},{"cs544-js-utils":"8WQYV","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"8WQYV":[function(require,module,exports) {
+},{"cs544-js-utils":"8WQYV","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./response-envelopes.js":"lOej1"}],"8WQYV":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "Errors", ()=>_errorsJs);
@@ -892,20 +1090,67 @@ exports.export = function(dest, destName, get) {
     });
 };
 
-},{}],"3cCYB":[function(require,module,exports) {
-/** Return a new DOM element with specified tagName, attributes given
- *  by object attrs and internal elements appendees which can be text
- *  or HTML elements.  Note that .append(TextOrElement...) can be
- *  called on the returned element to append further string text or a
- *  DOM elements to it while setAttribute() can be used for setting
- *  its attributes.
+},{}],"lOej1":[function(require,module,exports) {
+/**
+ * Type guard for SuccessEnvelope<T>
+ * Checks if the envelope is a successful, non-paged response.
+ */ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
+parcelHelpers.defineInteropFlag(exports);
+parcelHelpers.export(exports, "isSuccessEnvelope", ()=>isSuccessEnvelope);
+/**
+ * Type guard for PagedEnvelope<T>
+ * Checks if the envelope is a successful, paged response.
+ */ parcelHelpers.export(exports, "isPagedEnvelope", ()=>isPagedEnvelope);
+/**
+ * Type guard for ErrorEnvelope
+ * Checks if the envelope represents an error response.
+ */ parcelHelpers.export(exports, "isErrorEnvelope", ()=>isErrorEnvelope);
+function isSuccessEnvelope(envelope) {
+    return envelope.isOk === true && "result" in envelope && !Array.isArray(envelope.result);
+}
+function isPagedEnvelope(envelope) {
+    return envelope.isOk === true && "result" in envelope && Array.isArray(envelope.result);
+}
+function isErrorEnvelope(envelope) {
+    return envelope.isOk === false && "errors" in envelope;
+}
+
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"3cCYB":[function(require,module,exports) {
+/**
+ * Create and return a new DOM element.
+ * @param tagName The tag name for the element (e.g., 'div', 'p', 'ul').
+ * @param attrs An object containing attributes to set on the element.
+ * @param appendees Elements or text to append as children of the created element.
+ * @returns The created DOM element.
  */ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "makeElement", ()=>makeElement);
-/** Given a baseUrl and req, return a URL object which contains
- *  req as query-parameters appended to baseUrl.
+/**
+ * Create a URL object by appending query parameters to a base URL.
+ * @param baseUrl The base URL string.
+ * @param req An object representing key-value pairs for query parameters.
+ * @returns A URL object with the query parameters appended.
  */ parcelHelpers.export(exports, "makeQueryUrl", ()=>makeQueryUrl);
-/** Return a key-value mapping for all non-empty data from form */ parcelHelpers.export(exports, "getFormData", ()=>getFormData);
+/**
+ * Extract key-value pairs from a form, filtering out empty fields.
+ * @param form The form element to extract data from.
+ * @returns An object containing non-empty form data as key-value pairs.
+ */ parcelHelpers.export(exports, "getFormData", ()=>getFormData);
+/**
+ * Display errors in a designated errors container.
+ * @param errorsContainer The DOM element to contain error messages.
+ * @param errors An array of error messages to display.
+ */ parcelHelpers.export(exports, "displayErrors", ()=>displayErrors);
+/**
+ * Clear all error messages from a designated container.
+ * @param errorsContainer The DOM element to clear error messages from.
+ */ parcelHelpers.export(exports, "clearErrors", ()=>clearErrors);
+/**
+ * Create a button with a specified label and click handler.
+ * @param label The text displayed on the button.
+ * @param onClick The function to execute when the button is clicked.
+ * @returns The created button element.
+ */ parcelHelpers.export(exports, "makeButton", ()=>makeButton);
 function makeElement(tagName, attrs = {}, ...appendees) {
     const element = document.createElement(tagName);
     for (const [k, v] of Object.entries(attrs))element.setAttribute(k, v);
@@ -925,6 +1170,24 @@ function getFormData(form) {
             v
         ]).filter(([_, v])=>v.trim().length > 0);
     return Object.fromEntries(pairs);
+}
+function displayErrors(errorsContainer, errors) {
+    errorsContainer.innerHTML = ""; // Clear previous errors
+    errors.forEach((err)=>{
+        const errorItem = makeElement("li", {
+            class: "error"
+        }, err.message);
+        errorsContainer.appendChild(errorItem);
+    });
+}
+function clearErrors(errorsContainer) {
+    errorsContainer.innerHTML = "";
+}
+function makeButton(label, onClick) {
+    const button = document.createElement("button");
+    button.textContent = label;
+    button.addEventListener("click", onClick);
+    return button;
 }
 
 },{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}]},["6fQGg","CnCET"], "CnCET", "parcelRequireeeb6")
