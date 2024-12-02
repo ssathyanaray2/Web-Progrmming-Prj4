@@ -124,78 +124,85 @@ class App {
   }
 
   /**
-   * Creates pagination controls for navigating results.
-   */
-  private createPagination(links: NavLinks): HTMLElement {
-    const paginationContainer = makeElement('div', {
-      class: 'pagination',
-      style: 'display: flex; justify-content: space-between; align-items: center; width: 100%;',
-    });
-  
-    // Previous Button
-    const prevButton = makeElement(
-      'button',
-      {
-        style: 'all: unset; color: blue; text-decoration: underline; cursor: pointer;',
-        disabled: links.prev ? undefined : 'true', // Disable if no previous link
-      },
-      '<< Previous'
-    );
-  
-    if (links.prev) {
-      prevButton.addEventListener('click', async () => {
-        const prevUrl = new URL(links.prev.href, this.wsUrl).toString(); // Convert to absolute
-        console.log('Fetching previous page:', prevUrl); // Debug log
-        try {
-          const result = await this.ws.findBooksByUrl(prevUrl);
-          if (result.isOk) {
-            this.displayBooksWithPagination(result.val);
-          } else {
-            const errorResult = result as Errors.ErrResult;
-            console.error('Error fetching previous page:', errorResult);
-            this.displayErrors(errorResult.errors);
-          }
-        } catch (error) {
+ * Creates pagination controls for navigating results.
+ */
+private createPagination(links: NavLinks): HTMLElement {
+  const paginationContainer = makeElement('div', {
+    class: 'pagination',
+    style: 'display: flex; justify-content: space-between; align-items: center; width: 100%;',
+  });
+
+  // Previous Button
+  const prevButton = makeElement(
+    'button',
+    {
+      style: 'color: blue; text-decoration: underline; cursor: pointer;', // Updated styles
+    },
+    '<< Previous'
+  );
+
+  if (links.prev) {
+    prevButton.addEventListener('click', async () => {
+      const prevUrl = new URL(links.prev.href, this.wsUrl).toString(); // Convert to absolute URL
+      console.log('Fetching previous page:', prevUrl); // Debug log
+      try {
+        const result = await this.ws.findBooksByUrl(prevUrl);
+        if (result.isOk) {
+          this.displayBooksWithPagination(result.val);
+        } else {
+          const errorResult = result as Errors.ErrResult;
+          console.error('Error fetching previous page:', errorResult);
+          this.displayErrors(errorResult.errors);
+        }
+      } catch (
+        error) {
           console.error('Unexpected error fetching previous page:', error);
         }
       });
-    }
-  
     paginationContainer.appendChild(prevButton);
-  
-    // Next Button
-    const nextButton = makeElement(
-      'button',
-      {
-        style: 'all: unset; color: blue; text-decoration: underline; cursor: pointer;',
-        disabled: links.next ? undefined : 'true', // Disable if no next link
-      },
-      'Next >>'
-    );
-  
-    if (links.next) {
-      nextButton.addEventListener('click', async () => {
-        const nextUrl = new URL(links.next.href, this.wsUrl).toString(); // Convert to absolute
-        console.log('Fetching next page:', nextUrl); // Debug log
-        try {
-          const result = await this.ws.findBooksByUrl(nextUrl);
-          if (result.isOk) {
-            this.displayBooksWithPagination(result.val);
-          } else {
-            const errorResult = result as Errors.ErrResult;
-            console.error('Error fetching next page:', errorResult);
-            this.displayErrors(errorResult.errors);
-          }
-        } catch (error) {
-          console.error('Unexpected error fetching next page:', error);
+  } else {
+    // Disable the button if no previous link
+    prevButton.setAttribute('disabled', 'true');
+    prevButton.style.cursor = 'not-allowed'; // Add visual indication
+    paginationContainer.appendChild(prevButton);
+  }
+
+  // Next Button
+  const nextButton = makeElement(
+    'button',
+    {
+      style: 'color: blue; text-decoration: underline; cursor: pointer;', // Updated styles
+    },
+    'Next >>'
+  );
+
+  if (links.next) {
+    nextButton.addEventListener('click', async () => {
+      const nextUrl = new URL(links.next.href, this.wsUrl).toString(); // Convert to absolute URL
+      console.log('Fetching next page:', nextUrl); // Debug log
+      try {
+        const result = await this.ws.findBooksByUrl(nextUrl);
+        if (result.isOk) {
+          this.displayBooksWithPagination(result.val);
+        } else {
+          const errorResult = result as Errors.ErrResult;
+          console.error('Error fetching next page:', errorResult);
+          this.displayErrors(errorResult.errors);
         }
-      });
-    }
-  
+      } catch (error) {
+        console.error('Unexpected error fetching next page:', error);
+      }
+    });
     paginationContainer.appendChild(nextButton);
-  
-    return paginationContainer;
-  }  
+  } else {
+    // Disable the button if no next link
+    nextButton.setAttribute('disabled', 'true');
+    nextButton.style.cursor = 'not-allowed'; // Add visual indication
+    paginationContainer.appendChild(nextButton);
+  }
+
+  return paginationContainer;
+}
 
   /**
    * Displays the details of one or more books.
