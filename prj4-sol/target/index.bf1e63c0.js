@@ -591,18 +591,29 @@ const DEFAULT_WS_URL = "https://localhost:2345";
 /**
  * Entry point for the application.
  * Initializes the app after the DOM content is fully loaded.
- */ window.addEventListener("DOMContentLoaded", async ()=>{
-    const wsUrl = getWsUrl();
-    console.log(`Using Web Services URL: ${wsUrl}`);
-    (0, _appJsDefault.default)(wsUrl);
+ */ window.addEventListener("DOMContentLoaded", ()=>{
+    try {
+        const wsUrl = getWsUrl();
+        console.log(`Using Web Services URL: ${wsUrl}`);
+        (0, _appJsDefault.default)(wsUrl);
+    } catch (error) {
+        console.error("Error during app initialization:", error);
+        const errorContainer = document.getElementById("errors");
+        if (errorContainer) errorContainer.innerHTML = `<p>Failed to initialize the application. Please try again later.</p>`;
+    }
 });
 /**
  * Extracts the Web Services URL from the query parameters.
  * Defaults to `DEFAULT_WS_URL` if no parameter is found.
  * @returns The Web Services URL to be used by the application.
  */ function getWsUrl() {
-    const url = new URL(document.location.href);
-    return url.searchParams.get("ws-url") ?? DEFAULT_WS_URL;
+    try {
+        const url = new URL(document.location.href);
+        return url.searchParams.get("ws-url") ?? DEFAULT_WS_URL;
+    } catch (error) {
+        console.error("Invalid URL detected, using default Web Services URL:", error);
+        return DEFAULT_WS_URL;
+    }
 }
 
 },{"./app.js":"6wtUX","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"6wtUX":[function(require,module,exports) {
@@ -688,7 +699,9 @@ class App {
             }, "details...");
             detailsLink.addEventListener("click", (event)=>{
                 event.preventDefault();
-                this.showBookDetails(book);
+                this.showBookDetails([
+                    book
+                ]);
             });
             li.append(titleSpan, detailsLink);
             list.append(li);
@@ -701,71 +714,186 @@ class App {
     /**
      * Creates pagination controls for navigating results.
      */ createPagination(links) {
-        const nav = (0, _utilsJs.makeElement)("div", {
-            class: "pagination"
+        const paginationContainer = (0, _utilsJs.makeElement)("div", {
+            class: "pagination",
+            style: "display: flex; justify-content: space-between; align-items: center; width: 100%;"
         });
-        if (links.prev) {
-            const prevLink = (0, _utilsJs.makeElement)("a", {
-                href: "#",
-                class: "prev"
-            }, "<< Previous");
-            prevLink.addEventListener("click", (event)=>{
-                event.preventDefault();
-                this.handlePagination(links.prev.href);
-            });
-            nav.appendChild(prevLink);
-        }
-        if (links.next) {
-            const nextLink = (0, _utilsJs.makeElement)("a", {
-                href: "#",
-                class: "next"
-            }, "Next >>");
-            nextLink.addEventListener("click", (event)=>{
-                event.preventDefault();
-                this.handlePagination(links.next.href);
-            });
-            nav.appendChild(nextLink);
-        }
-        return nav;
+        // Previous Button
+        const prevButton = (0, _utilsJs.makeElement)("button", {
+            style: "all: unset; color: blue; text-decoration: underline; cursor: pointer;",
+            disabled: links.prev ? undefined : "true"
+        }, "<< Previous");
+        if (links.prev) prevButton.addEventListener("click", async ()=>{
+            const prevUrl = new URL(links.prev.href, this.wsUrl).toString(); // Convert to absolute
+            console.log("Fetching previous page:", prevUrl); // Debug log
+            try {
+                const result = await this.ws.findBooksByUrl(prevUrl);
+                if (result.isOk) this.displayBooksWithPagination(result.val);
+                else {
+                    const errorResult = result;
+                    console.error("Error fetching previous page:", errorResult);
+                    this.displayErrors(errorResult.errors);
+                }
+            } catch (error) {
+                console.error("Unexpected error fetching previous page:", error);
+            }
+        });
+        paginationContainer.appendChild(prevButton);
+        // Next Button
+        const nextButton = (0, _utilsJs.makeElement)("button", {
+            style: "all: unset; color: blue; text-decoration: underline; cursor: pointer;",
+            disabled: links.next ? undefined : "true"
+        }, "Next >>");
+        if (links.next) nextButton.addEventListener("click", async ()=>{
+            const nextUrl = new URL(links.next.href, this.wsUrl).toString(); // Convert to absolute
+            console.log("Fetching next page:", nextUrl); // Debug log
+            try {
+                const result = await this.ws.findBooksByUrl(nextUrl);
+                if (result.isOk) this.displayBooksWithPagination(result.val);
+                else {
+                    const errorResult = result;
+                    console.error("Error fetching next page:", errorResult);
+                    this.displayErrors(errorResult.errors);
+                }
+            } catch (error) {
+                console.error("Unexpected error fetching next page:", error);
+            }
+        });
+        paginationContainer.appendChild(nextButton);
+        return paginationContainer;
     }
     /**
-     * Handles pagination navigation.
-     */ async handlePagination(link) {
-        const result = await this.ws.findBooksByUrl(link);
-        if (result.isOk) // This is an OkResult, so we can safely access `val`.
-        this.displayBooksWithPagination(result.val);
-        else {
-            // This is an ErrResult, so we can safely cast and access `errors`.
-            const errorResult = result;
-            this.displayErrors(errorResult.errors);
+     * Displays the details of one or more books.
+     * Accepts a list of books, even if it's a single one.
+     */ async showBookDetails(books) {
+        // Clear existing book details but preserve the layout
+        const detailsContainer = document.querySelector(".book-details");
+        if (detailsContainer) detailsContainer.remove(); // Remove previous details section
+        // Iterate over the list of books and fetch details for each
+        for (const book of books){
+            const bookUrl = new URL(book.links.self.href, this.wsUrl).toString();
+            console.log("Fetching details for book:", bookUrl); // Debug log
+            try {
+                const result = await this.ws.getBookByUrl(bookUrl);
+                if (result.isOk) {
+                    const bookDetails = result.val;
+                    this.displayBookDetails(bookDetails.result); // Safely access the result
+                } else {
+                    // Handle errors for individual book fetches
+                    const errorResult = result;
+                    console.error("Error fetching book details:", errorResult);
+                    this.displayErrors(errorResult.errors);
+                }
+            } catch (error) {
+                console.error("Unexpected error fetching book details:", error);
+            }
         }
-    }
-    /**
-     * Displays the details of a specific book.
-     */ async showBookDetails(book) {
-        const bookUrl = book.links.self.href;
-        const result = await this.ws.getBookByUrl(bookUrl);
-        const bookDetails = this.unwrap(result);
-        if (bookDetails) this.displayBookDetails(bookDetails.result);
     }
     /**
      * Renders the details of a book.
-     */ displayBookDetails(book) {
-        this.result.innerHTML = "";
-        const details = (0, _utilsJs.makeElement)("div");
-        details.append((0, _utilsJs.makeElement)("p", {}, `ISBN: ${book.isbn}`), (0, _utilsJs.makeElement)("p", {}, `Title: ${book.title}`), (0, _utilsJs.makeElement)("p", {}, `Authors: ${book.authors.join(", ")}`), (0, _utilsJs.makeElement)("p", {}, `Number of Pages: ${book.pages}`), (0, _utilsJs.makeElement)("p", {}, `Publisher: ${book.publisher}`), (0, _utilsJs.makeElement)("p", {}, `Number of Copies: ${book.nCopies}`));
-        this.result.append(details);
-    }
-    /**
-     * Safely unwraps the result or displays errors.
-     */ unwrap(result) {
-        if (result.isOk === false) {
-            // This is an ErrResult
-            this.displayErrors(result.errors); // Safely access errors
-            return null;
-        }
-        // This is an OkResult
-        return result.val;
+     */ /**
+   * Renders the details of a book.
+   */ displayBookDetails(book) {
+        const detailsContainer = document.querySelector(".book-details");
+        if (detailsContainer) detailsContainer.remove();
+        const details = (0, _utilsJs.makeElement)("div", {
+            class: "book-details"
+        });
+        details.append((0, _utilsJs.makeElement)("p", {}, `ISBN: ${book.isbn}`), (0, _utilsJs.makeElement)("p", {}, `Title: ${book.title}`), (0, _utilsJs.makeElement)("p", {}, `Authors: ${book.authors?.join(", ") || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Number of Pages: ${book.pages || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Publisher: ${book.publisher || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Number of Copies: ${book.nCopies || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, "Borrowers:"));
+        const borrowersList = (0, _utilsJs.makeElement)("ul");
+        // Display existing borrowers
+        book.borrowers?.forEach((borrower)=>{
+            const borrowerItem = (0, _utilsJs.makeElement)("li", {}, borrower.name);
+            const returnButton = (0, _utilsJs.makeElement)("button", {
+                style: "margin-left: 10px; color: blue; cursor: pointer;"
+            }, "Return Book");
+            returnButton.addEventListener("click", async ()=>{
+                try {
+                    await this.ws.returnBook({
+                        isbn: book.isbn,
+                        patronId: borrower.id
+                    });
+                    alert(`Book returned by ${borrower.name}`);
+                    borrowerItem.remove(); // Remove borrower from UI
+                    if (book.nCopies !== undefined) {
+                        book.nCopies += 1; // Increment copies
+                        const copiesElement = document.querySelector(".book-details p:nth-child(6)");
+                        if (copiesElement) copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
+                    }
+                } catch (error) {
+                    console.error("Error returning book:", error);
+                }
+            });
+            borrowerItem.appendChild(returnButton);
+            borrowersList.appendChild(borrowerItem);
+        });
+        details.appendChild(borrowersList);
+        // Checkout section
+        const patronInput = (0, _utilsJs.makeElement)("input", {
+            id: "patron-id",
+            placeholder: "Enter Patron ID"
+        });
+        const checkoutButton = (0, _utilsJs.makeElement)("button", {}, "Checkout Book");
+        checkoutButton.addEventListener("click", async ()=>{
+            const patronId = patronInput.value.trim();
+            if (!patronId) {
+                alert("Please enter a Patron ID.");
+                return;
+            }
+            try {
+                const result = await this.ws.checkoutBook({
+                    isbn: book.isbn,
+                    patronId
+                });
+                if (result.isOk) {
+                    alert(`Book checked out to Patron ID: ${patronId}`);
+                    if (book.nCopies && book.nCopies > 0) {
+                        book.nCopies -= 1;
+                        const copiesElement = document.querySelector(".book-details p:nth-child(6)");
+                        if (copiesElement) copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
+                    }
+                    const borrowerItem = (0, _utilsJs.makeElement)("li", {}, patronId);
+                    const returnButton = (0, _utilsJs.makeElement)("button", {
+                        style: "margin-left: 10px; color: blue; cursor: pointer;"
+                    }, "Return Book");
+                    returnButton.addEventListener("click", async ()=>{
+                        try {
+                            await this.ws.returnBook({
+                                isbn: book.isbn,
+                                patronId
+                            });
+                            alert(`Book returned by ${patronId}`);
+                            borrowerItem.remove();
+                            if (book.nCopies !== undefined) {
+                                book.nCopies += 1;
+                                const copiesElement = document.querySelector(".book-details p:nth-child(6)");
+                                if (copiesElement) copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
+                            }
+                        } catch (error) {
+                            console.error("Error returning book:", error);
+                        }
+                    });
+                    borrowerItem.appendChild(returnButton);
+                    borrowersList.appendChild(borrowerItem);
+                } else {
+                    const errorResult = result;
+                    alert(`Failed to checkout book: ${errorResult.errors.map((err)=>err.message).join(", ")}`);
+                }
+            } catch (error) {
+                console.error("Error checking out book:", error);
+            }
+        });
+        details.append((0, _utilsJs.makeElement)("p", {}, "Patron ID:"), patronInput, checkoutButton);
+        const backButton = (0, _utilsJs.makeElement)("button", {
+            style: "margin-top: 20px; color: blue; cursor: pointer;"
+        }, "Back to Results");
+        backButton.addEventListener("click", ()=>{
+            const detailsSection = document.querySelector(".book-details");
+            if (detailsSection) detailsSection.remove();
+            this.result.scrollIntoView();
+        });
+        details.appendChild(backButton);
+        this.result.appendChild(details);
     }
     /**
      * Displays a specific error for a field.
@@ -832,11 +960,11 @@ class LibraryWs {
         return await getEnvelope(findUrl);
     }
     /**
-     * Checkout a book for a patron.
-     * @param lend The lending details containing the book and patron info.
-     * @returns A Result indicating success or an error.
-     */ async checkoutBook(lend) {
-        const url = `${this.url}/lendings`;
+   * Checkout a book for a patron.
+   * @param lend The lending details containing the book and patron info.
+   * @returns A Result indicating success or an error.
+   */ async checkoutBook(lend) {
+        const url = `${this.url}/api/lendings`; // Ensure `/api` is included
         const options = {
             method: "PUT",
             headers: {
@@ -844,7 +972,17 @@ class LibraryWs {
             },
             body: JSON.stringify(lend)
         };
-        return await fetchJson(url, options);
+        try {
+            console.log("Checkout URL:", url);
+            console.log("Request options:", options);
+            const result = await fetchJson(url, options);
+            if (result.isOk) console.log("Checkout successful:", result);
+            else console.error("Error during checkout:", result);
+            return result;
+        } catch (error) {
+            console.error("Unexpected error during checkout:", error);
+            return (0, _cs544JsUtils.Errors).errResult("Unexpected error during checkout.");
+        }
     }
     /**
      * Return a previously checked-out book.
@@ -897,26 +1035,36 @@ class LibraryWs {
     }
     return result;
 }
-/**
- * Generic fetch wrapper with JSON parsing and error handling.
- * @param url The URL for the fetch request.
- * @param options Fetch options (method, headers, body, etc.).
- * @returns A Result containing the parsed response or an error.
- */ async function fetchJson(url, options = {
+async function fetchJson(url, options = {
     method: "GET"
 }) {
     try {
+        console.log(`Fetching URL: ${url}`, options);
         const response = await fetch(url.toString(), options);
-        if (!response.ok) return (0, _cs544JsUtils.Errors).errResult(`HTTP error ${response.status}: ${response.statusText}`);
-        const json = await response.json();
-        return (0, _cs544JsUtils.Errors).okResult(json);
+        if (!response.ok) {
+            const text = await response.text();
+            console.error(`HTTP error ${response.status}: ${response.statusText}`);
+            console.error("Error response body:", text);
+            return (0, _cs544JsUtils.Errors).errResult(`HTTP error ${response.status}: ${response.statusText}`);
+        }
+        const contentType = response.headers.get("Content-Type");
+        if (contentType && contentType.includes("application/json")) {
+            const json = await response.json();
+            console.log("Successful response:", json); // Debug the JSON response
+            return (0, _cs544JsUtils.Errors).okResult(json);
+        } else {
+            const text = await response.text();
+            console.error("Unexpected content type:", contentType);
+            console.error("Response body:", text);
+            return (0, _cs544JsUtils.Errors).errResult("Unexpected response type.");
+        }
     } catch (error) {
-        console.error(`Fetch failed: ${error}`);
+        console.error("Fetch failed:", error);
         return (0, _cs544JsUtils.Errors).errResult(`Failed to fetch from ${url}: ${error}`);
     }
 }
 
-},{"cs544-js-utils":"8WQYV","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./response-envelopes.js":"lOej1"}],"8WQYV":[function(require,module,exports) {
+},{"cs544-js-utils":"8WQYV","./response-envelopes.js":"lOej1","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"8WQYV":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "Errors", ()=>_errorsJs);

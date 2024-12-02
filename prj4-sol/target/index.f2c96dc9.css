@@ -165,4 +165,10 @@ footer li + li:before {
 .hide {
   visibility: hidden;
 }
+
+.pagination {
+  justify-content: space-between;
+  align-items: center;
+  display: flex;
+}
 /*# sourceMappingURL=index.f2c96dc9.css.map */

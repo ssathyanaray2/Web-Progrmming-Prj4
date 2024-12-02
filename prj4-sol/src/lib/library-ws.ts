@@ -37,19 +37,36 @@ export class LibraryWs {
   }
 
   /**
-   * Checkout a book for a patron.
-   * @param lend The lending details containing the book and patron info.
-   * @returns A Result indicating success or an error.
-   */
+ * Checkout a book for a patron.
+ * @param lend The lending details containing the book and patron info.
+ * @returns A Result indicating success or an error.
+ */
   async checkoutBook(lend: Lib.Lend): Promise<Errors.Result<void>> {
-    const url = `${this.url}/lendings`;
+    const url = `${this.url}/api/lendings`; // Ensure `/api` is included
     const options: RequestInit = {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(lend),
+      headers: { 'Content-Type': 'application/json' }, // Ensure proper Content-Type
+      body: JSON.stringify(lend), // Serialize the lend object to JSON
     };
-    return await fetchJson<void>(url, options);
-  }
+  
+    try {
+      console.log('Checkout URL:', url);
+      console.log('Request options:', options);
+  
+      const result = await fetchJson<void>(url, options);
+  
+      if (result.isOk) {
+        console.log('Checkout successful:', result);
+      } else {
+        console.error('Error during checkout:', result);
+      }
+  
+      return result;
+    } catch (error) {
+      console.error('Unexpected error during checkout:', error);
+      return Errors.errResult('Unexpected error during checkout.');
+    }
+  }  
 
   /**
    * Return a previously checked-out book.
@@ -116,24 +133,31 @@ async function getEnvelope<T, T1 extends SuccessEnvelope<T> | PagedEnvelope<T>>(
   return result as Errors.Result<T1>;
 }
 
-/**
- * Generic fetch wrapper with JSON parsing and error handling.
- * @param url The URL for the fetch request.
- * @param options Fetch options (method, headers, body, etc.).
- * @returns A Result containing the parsed response or an error.
- */
 async function fetchJson<T>(url: URL | string, options: RequestInit = { method: 'GET' }): Promise<Errors.Result<T>> {
   try {
+    console.log(`Fetching URL: ${url}`, options);
     const response = await fetch(url.toString(), options);
 
     if (!response.ok) {
+      const text = await response.text();
+      console.error(`HTTP error ${response.status}: ${response.statusText}`);
+      console.error('Error response body:', text);
       return Errors.errResult(`HTTP error ${response.status}: ${response.statusText}`);
     }
 
-    const json = await response.json();
-    return Errors.okResult(json as T);
+    const contentType = response.headers.get('Content-Type');
+    if (contentType && contentType.includes('application/json')) {
+      const json = await response.json();
+      console.log('Successful response:', json); // Debug the JSON response
+      return Errors.okResult(json as T);
+    } else {
+      const text = await response.text();
+      console.error('Unexpected content type:', contentType);
+      console.error('Response body:', text);
+      return Errors.errResult('Unexpected response type.');
+    }
   } catch (error) {
-    console.error(`Fetch failed: ${error}`);
+    console.error('Fetch failed:', error);
     return Errors.errResult(`Failed to fetch from ${url}: ${error}`);
   }
 }

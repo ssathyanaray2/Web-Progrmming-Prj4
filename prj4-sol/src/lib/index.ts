@@ -1,4 +1,3 @@
-import { Errors } from 'cs544-js-utils';
 import makeApp from './app.js';
 
 const DEFAULT_WS_URL = 'https://localhost:2345';
@@ -7,10 +6,18 @@ const DEFAULT_WS_URL = 'https://localhost:2345';
  * Entry point for the application.
  * Initializes the app after the DOM content is fully loaded.
  */
-window.addEventListener('DOMContentLoaded', async () => {
-  const wsUrl = getWsUrl();
-  console.log(`Using Web Services URL: ${wsUrl}`);
-  makeApp(wsUrl);
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const wsUrl = getWsUrl();
+    console.log(`Using Web Services URL: ${wsUrl}`);
+    makeApp(wsUrl);
+  } catch (error) {
+    console.error('Error during app initialization:', error);
+    const errorContainer = document.getElementById('errors');
+    if (errorContainer) {
+      errorContainer.innerHTML = `<p>Failed to initialize the application. Please try again later.</p>`;
+    }
+  }
 });
 
 /**
@@ -19,6 +26,11 @@ window.addEventListener('DOMContentLoaded', async () => {
  * @returns The Web Services URL to be used by the application.
  */
 function getWsUrl(): string {
-  const url = new URL(document.location.href);
-  return url.searchParams.get('ws-url') ?? DEFAULT_WS_URL;
+  try {
+    const url = new URL(document.location.href);
+    return url.searchParams.get('ws-url') ?? DEFAULT_WS_URL;
+  } catch (error) {
+    console.error('Invalid URL detected, using default Web Services URL:', error);
+    return DEFAULT_WS_URL;
+  }
 }
