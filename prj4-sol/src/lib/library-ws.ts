@@ -69,18 +69,35 @@ export class LibraryWs {
   }  
 
   /**
-   * Return a previously checked-out book.
-   * @param lend The lending details containing the book and patron info.
-   * @returns A Result indicating success or an error.
-   */
+ * Return a previously checked-out book.
+ * @param lend The lending details containing the book and patron info.
+ * @returns A Result indicating success or an error.
+ */
   async returnBook(lend: Lib.Lend): Promise<Errors.Result<void>> {
-    const url = `${this.url}/lendings`;
+    const url = `${this.url}/api/lendings`; // Corrected to include `/api`
     const options: RequestInit = {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(lend),
+      headers: { 'Content-Type': 'application/json' }, // Ensure proper Content-Type
+      body: JSON.stringify(lend), // Serialize the lend object to JSON
     };
-    return await fetchJson<void>(url, options);
+
+    try {
+      console.log('Return URL:', url);
+      console.log('Request options:', options);
+
+      const result = await fetchJson<void>(url, options);
+
+      if (result.isOk) {
+        console.log('Return successful:', result);
+      } else {
+        console.error('Error during return:', result);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Unexpected error during return:', error);
+      return Errors.errResult('Unexpected error during return.');
+    }
   }
 
   /**

@@ -997,11 +997,11 @@ class LibraryWs {
         }
     }
     /**
-     * Return a previously checked-out book.
-     * @param lend The lending details containing the book and patron info.
-     * @returns A Result indicating success or an error.
-     */ async returnBook(lend) {
-        const url = `${this.url}/lendings`;
+   * Return a previously checked-out book.
+   * @param lend The lending details containing the book and patron info.
+   * @returns A Result indicating success or an error.
+   */ async returnBook(lend) {
+        const url = `${this.url}/api/lendings`; // Corrected to include `/api`
         const options = {
             method: "DELETE",
             headers: {
@@ -1009,7 +1009,17 @@ class LibraryWs {
             },
             body: JSON.stringify(lend)
         };
-        return await fetchJson(url, options);
+        try {
+            console.log("Return URL:", url);
+            console.log("Request options:", options);
+            const result = await fetchJson(url, options);
+            if (result.isOk) console.log("Return successful:", result);
+            else console.error("Error during return:", result);
+            return result;
+        } catch (error) {
+            console.error("Unexpected error during return:", error);
+            return (0, _cs544JsUtils.Errors).errResult("Unexpected error during return.");
+        }
     }
     /**
      * Get all lendings of a specific book by ISBN.
