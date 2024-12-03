@@ -101,16 +101,31 @@ export class LibraryWs {
   }
 
   /**
-   * Get all lendings of a specific book by ISBN.
-   * @param isbn The ISBN of the book.
-   * @returns A Result containing a list of lendings or an error.
-   */
-  async getLends(isbn: string): Promise<Errors.Result<Lib.Lend[]>> {
-    const url = new URL(`${this.url}/lendings`);
-    url.searchParams.append('findBy', 'isbn');
-    url.searchParams.append('isbn', isbn);
-    return await fetchJson<Lib.Lend[]>(url);
+ * Get all lendings of a specific book by ISBN.
+ * @param isbn The ISBN of the book.
+ * @returns A Result containing a list of lendings or an error.
+ */
+async getLends(isbn: string): Promise<Errors.Result<Lib.Lend[]>> {
+  const url = new URL(`${this.url}/api/lendings`); // Ensure `/api` is included
+  url.searchParams.append('findBy', 'isbn');
+  url.searchParams.append('isbn', isbn);
+
+  try {
+    console.log('Fetching lends by ISBN:', url.toString());
+    const result = await fetchJson<Lib.Lend[]>(url);
+
+    if (result.isOk) {
+      console.log('Lendings by ISBN fetched successfully:', result.val);
+    } else {
+      console.error('Error fetching lendings by ISBN:', result);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Unexpected error fetching lendings by ISBN:', error);
+    return Errors.errResult('Unexpected error fetching lendings by ISBN.');
   }
+}
 
   /**
    * Get all lendings by a specific patron ID.
@@ -118,10 +133,25 @@ export class LibraryWs {
    * @returns A Result containing a list of lendings or an error.
    */
   async getLendsByPatron(patronId: string): Promise<Errors.Result<Lib.Lend[]>> {
-    const url = new URL(`${this.url}/lendings`);
+    const url = new URL(`${this.url}/api/lendings`); // Ensure `/api` is included
     url.searchParams.append('findBy', 'patronId');
     url.searchParams.append('patronId', patronId);
-    return await fetchJson<Lib.Lend[]>(url);
+
+    try {
+      console.log('Fetching lends by Patron ID:', url.toString());
+      const result = await fetchJson<Lib.Lend[]>(url);
+
+      if (result.isOk) {
+        console.log('Lendings by Patron ID fetched successfully:', result.val);
+      } else {
+        console.error('Error fetching lendings by Patron ID:', result);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Unexpected error fetching lendings by Patron ID:', error);
+      return Errors.errResult('Unexpected error fetching lendings by Patron ID.');
+    }
   }
 }
 

@@ -802,10 +802,8 @@ class App {
         }
     }
     /**
-     * Renders the details of a book.
-     */ /**
    * Renders the details of a book.
-   */ displayBookDetails(book) {
+   */ async displayBookDetails(book) {
         const detailsContainer = document.querySelector(".book-details");
         if (detailsContainer) detailsContainer.remove();
         const details = (0, _utilsJs.makeElement)("div", {
@@ -813,33 +811,51 @@ class App {
         });
         details.append((0, _utilsJs.makeElement)("p", {}, `ISBN: ${book.isbn}`), (0, _utilsJs.makeElement)("p", {}, `Title: ${book.title}`), (0, _utilsJs.makeElement)("p", {}, `Authors: ${book.authors?.join(", ") || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Number of Pages: ${book.pages || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Publisher: ${book.publisher || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, `Number of Copies: ${book.nCopies || "N/A"}`), (0, _utilsJs.makeElement)("p", {}, "Borrowers:"));
         const borrowersList = (0, _utilsJs.makeElement)("ul");
-        // Display existing borrowers
-        book.borrowers?.forEach((borrower)=>{
-            const borrowerItem = (0, _utilsJs.makeElement)("li", {}, borrower.name);
-            const returnButton = (0, _utilsJs.makeElement)("button", {
-                style: "margin-left: 10px; color: blue; cursor: pointer;"
-            }, "Return Book");
-            returnButton.addEventListener("click", async ()=>{
-                try {
-                    await this.ws.returnBook({
-                        isbn: book.isbn,
-                        patronId: borrower.id
-                    });
-                    alert(`Book returned by ${borrower.name}`);
-                    borrowerItem.remove(); // Remove borrower from UI
-                    if (book.nCopies !== undefined) {
-                        book.nCopies += 1; // Increment copies
-                        const copiesElement = document.querySelector(".book-details p:nth-child(6)");
-                        if (copiesElement) copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
-                    }
-                } catch (error) {
-                    console.error("Error returning book:", error);
-                }
-            });
-            borrowerItem.appendChild(returnButton);
-            borrowersList.appendChild(borrowerItem);
-        });
         details.appendChild(borrowersList);
+        try {
+            // Fetch borrower list from backend
+            const lendingsResult = await this.ws.getLends(book.isbn);
+            console.log("Fetched borrower list:", lendingsResult); // Debug log
+            if (lendingsResult.isOk) {
+                const lendings = lendingsResult.val.result; // Access the `result` field which contains the array
+                // Ensure lendings is an array
+                if (Array.isArray(lendings)) lendings.forEach((lending)=>{
+                    const borrowerItem = (0, _utilsJs.makeElement)("li", {}, lending.patronId);
+                    const returnButton = (0, _utilsJs.makeElement)("button", {
+                        style: "margin-left: 10px; color: blue; cursor: pointer;"
+                    }, "Return Book");
+                    returnButton.addEventListener("click", async ()=>{
+                        try {
+                            await this.ws.returnBook({
+                                isbn: book.isbn,
+                                patronId: lending.patronId
+                            });
+                            alert(`Book returned by ${lending.patronId}`);
+                            borrowerItem.remove();
+                            if (book.nCopies !== undefined) {
+                                book.nCopies += 1;
+                                const copiesElement = document.querySelector(".book-details p:nth-child(6)");
+                                if (copiesElement) copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
+                            }
+                        } catch (error) {
+                            console.error("Error returning book:", error);
+                        }
+                    });
+                    borrowerItem.appendChild(returnButton);
+                    borrowersList.appendChild(borrowerItem);
+                });
+                else {
+                    console.error("Lendings is not an array:", lendings);
+                    borrowersList.appendChild((0, _utilsJs.makeElement)("li", {}, "No borrowers found."));
+                }
+            } else {
+                console.error("Error fetching borrower list:", lendingsResult);
+                borrowersList.appendChild((0, _utilsJs.makeElement)("li", {}, "Failed to fetch borrowers."));
+            }
+        } catch (error) {
+            console.error("Unexpected error fetching borrower list:", error);
+            borrowersList.appendChild((0, _utilsJs.makeElement)("li", {}, "Failed to fetch borrowers."));
+        }
         // Checkout section
         const patronInput = (0, _utilsJs.makeElement)("input", {
             id: "patron-id",
@@ -1022,24 +1038,42 @@ class LibraryWs {
         }
     }
     /**
-     * Get all lendings of a specific book by ISBN.
-     * @param isbn The ISBN of the book.
-     * @returns A Result containing a list of lendings or an error.
-     */ async getLends(isbn) {
-        const url = new URL(`${this.url}/lendings`);
+   * Get all lendings of a specific book by ISBN.
+   * @param isbn The ISBN of the book.
+   * @returns A Result containing a list of lendings or an error.
+   */ async getLends(isbn) {
+        const url = new URL(`${this.url}/api/lendings`); // Ensure `/api` is included
         url.searchParams.append("findBy", "isbn");
         url.searchParams.append("isbn", isbn);
-        return await fetchJson(url);
+        try {
+            console.log("Fetching lends by ISBN:", url.toString());
+            const result = await fetchJson(url);
+            if (result.isOk) console.log("Lendings by ISBN fetched successfully:", result.val);
+            else console.error("Error fetching lendings by ISBN:", result);
+            return result;
+        } catch (error) {
+            console.error("Unexpected error fetching lendings by ISBN:", error);
+            return (0, _cs544JsUtils.Errors).errResult("Unexpected error fetching lendings by ISBN.");
+        }
     }
     /**
      * Get all lendings by a specific patron ID.
      * @param patronId The ID of the patron.
      * @returns A Result containing a list of lendings or an error.
      */ async getLendsByPatron(patronId) {
-        const url = new URL(`${this.url}/lendings`);
+        const url = new URL(`${this.url}/api/lendings`); // Ensure `/api` is included
         url.searchParams.append("findBy", "patronId");
         url.searchParams.append("patronId", patronId);
-        return await fetchJson(url);
+        try {
+            console.log("Fetching lends by Patron ID:", url.toString());
+            const result = await fetchJson(url);
+            if (result.isOk) console.log("Lendings by Patron ID fetched successfully:", result.val);
+            else console.error("Error fetching lendings by Patron ID:", result);
+            return result;
+        } catch (error) {
+            console.error("Unexpected error fetching lendings by Patron ID:", error);
+            return (0, _cs544JsUtils.Errors).errResult("Unexpected error fetching lendings by Patron ID.");
+        }
     }
 }
 /**

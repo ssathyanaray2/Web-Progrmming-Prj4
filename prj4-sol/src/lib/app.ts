@@ -238,18 +238,15 @@ private createPagination(links: NavLinks): HTMLElement {
     }
   }
 
-  /**
+    /**
    * Renders the details of a book.
    */
-  /**
- * Renders the details of a book.
- */
-  private displayBookDetails(book: Lib.XBook) {
+  private async displayBookDetails(book: Lib.XBook) {
     const detailsContainer = document.querySelector('.book-details');
     if (detailsContainer) {
       detailsContainer.remove();
     }
-  
+
     const details = makeElement('div', { class: 'book-details' });
     details.append(
       makeElement('p', {}, `ISBN: ${book.isbn}`),
@@ -262,39 +259,59 @@ private createPagination(links: NavLinks): HTMLElement {
     );
   
     const borrowersList = makeElement('ul');
-  
-    // Display existing borrowers
-    (book as any).borrowers?.forEach((borrower: { id: string; name: string }) => {
-      const borrowerItem = makeElement('li', {}, borrower.name);
-  
-      const returnButton = makeElement(
-        'button',
-        { style: 'margin-left: 10px; color: blue; cursor: pointer;' },
-        'Return Book'
-      );
-  
-      returnButton.addEventListener('click', async () => {
-        try {
-          await this.ws.returnBook({ isbn: book.isbn, patronId: borrower.id });
-          alert(`Book returned by ${borrower.name}`);
-          borrowerItem.remove(); // Remove borrower from UI
-          if (book.nCopies !== undefined) {
-            book.nCopies += 1; // Increment copies
-            const copiesElement = document.querySelector('.book-details p:nth-child(6)');
-            if (copiesElement) {
-              copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
-            }
-          }
-        } catch (error) {
-          console.error('Error returning book:', error);
-        }
-      });
-  
-      borrowerItem.appendChild(returnButton);
-      borrowersList.appendChild(borrowerItem);
-    });
-  
     details.appendChild(borrowersList);
+
+    try {
+      // Fetch borrower list from backend
+      const lendingsResult = await this.ws.getLends(book.isbn!);
+      console.log('Fetched borrower list:', lendingsResult); // Debug log
+    
+      if (lendingsResult.isOk) {
+        const lendings = lendingsResult.val.result; // Access the `result` field which contains the array
+    
+        // Ensure lendings is an array
+        if (Array.isArray(lendings)) {
+          lendings.forEach((lending) => {
+            const borrowerItem = makeElement('li', {}, lending.patronId);
+    
+            const returnButton = makeElement(
+              'button',
+              { style: 'margin-left: 10px; color: blue; cursor: pointer;' },
+              'Return Book'
+            );
+    
+            returnButton.addEventListener('click', async () => {
+              try {
+                await this.ws.returnBook({ isbn: book.isbn, patronId: lending.patronId });
+                alert(`Book returned by ${lending.patronId}`);
+                borrowerItem.remove();
+                if (book.nCopies !== undefined) {
+                  book.nCopies += 1;
+                  const copiesElement = document.querySelector('.book-details p:nth-child(6)');
+                  if (copiesElement) {
+                    copiesElement.textContent = `Number of Copies: ${book.nCopies}`;
+                  }
+                }
+              } catch (error) {
+                console.error('Error returning book:', error);
+              }
+            });
+    
+            borrowerItem.appendChild(returnButton);
+            borrowersList.appendChild(borrowerItem);
+          });
+        } else {
+          console.error('Lendings is not an array:', lendings);
+          borrowersList.appendChild(makeElement('li', {}, 'No borrowers found.'));
+        }
+      } else {
+        console.error('Error fetching borrower list:', lendingsResult);
+        borrowersList.appendChild(makeElement('li', {}, 'Failed to fetch borrowers.'));
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching borrower list:', error);
+      borrowersList.appendChild(makeElement('li', {}, 'Failed to fetch borrowers.'));
+    }    
   
     // Checkout section
     const patronInput = makeElement('input', {
